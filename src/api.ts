@@ -18,6 +18,11 @@ export const fetchJobs = async (): Promise<Job[]> => {
   return res.json();
 };
 
+export const fetchJobBridge = async (jobId: string): Promise<any[]> => {
+  const res = await fetch(`${API_URL}/jobs/${jobId}/bridge`);
+  return res.json();
+};
+
 export const updateUserSkills = async (skillIds: string[]): Promise<void> => {
   await fetch(`${API_URL}/user/skills`, {
     method: 'POST',

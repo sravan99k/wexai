@@ -7,15 +7,23 @@ import { Badge } from '../components/ui/Badge';
 import { ProgressRing } from '../components/ui/ProgressRing';
 import { SkillBadge } from '../components/shared/SkillBadge';
 import { useData } from '../context/DataContext';
+import { fetchJobBridge } from '../api';
 
 export const JobDetails: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id: jobId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { jobs, skills, userSkills, loading } = useData();
+  const [bridge, setBridge] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (jobId) {
+      fetchJobBridge(jobId).then(setBridge).catch(console.error);
+    }
+  }, [jobId]);
 
   if (loading) return <div className="p-8 text-neutral-dark text-center py-20">Loading job details...</div>;
   
-  const job = jobs.find(j => j.id === id);
+  const job = jobs.find(j => j.id === jobId);
 
   if (!job) {
     return (
@@ -150,6 +158,27 @@ export const JobDetails: React.FC = () => {
           </Card>
 
         </div>
+
+        {bridge.length > 0 && (
+          <div className="mt-8 animate-in slide-in-from-bottom-4 duration-500 delay-150">
+            <h3 className="text-xl font-bold text-neutral-darkest mb-4 flex items-center gap-2">
+              <span className="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center">🚀</span>
+              Skill Bridge Recommendations
+            </h3>
+            <p className="text-neutral-dark mb-4">Leverage what you already know! Based on your current skills, here are the easiest ways to bridge your gap for this role:</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {bridge.map((b, i) => (
+                <Card key={i} className="border-l-4 border-accent hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <p className="text-sm">
+                      Since you know <strong className="text-accent-dark">{b.currentSkill}</strong>, you can easily learn <strong className="text-primary-dark">{b.recommendedSkill}</strong>.
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -18,7 +18,14 @@ export const CareerGraph: React.FC = () => {
         // Assign coordinates dynamically for the SVG layout
         const jobNodes = data.nodes.filter((n: any) => n.type === 'job');
         const skillNodes = data.nodes.filter((n: any) => n.type === 'skill');
+        const userNodes = data.nodes.filter((n: any) => n.type === 'user');
         
+        userNodes.forEach((node: any) => {
+          node.x = 50;
+          node.y = 85;
+          node.label = "You (User)";
+        });
+
         jobNodes.forEach((node: any, i: number) => {
           node.x = 20 + (60 * (i / Math.max(1, jobNodes.length - 1)));
           node.y = 20;
@@ -29,7 +36,7 @@ export const CareerGraph: React.FC = () => {
           const row = Math.floor(i / 5);
           const col = i % 5;
           node.x = 10 + (80 * (col / 4));
-          node.y = 50 + (20 * row);
+          node.y = 40 + (20 * row);
         });
 
         setNodes(data.nodes);
@@ -65,6 +72,7 @@ export const CareerGraph: React.FC = () => {
             <div className="space-y-1.5">
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-primary-dark"></div>Job Role</div>
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-success"></div>Skill</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-accent"></div>You</div>
             </div>
           </div>
 
@@ -98,6 +106,7 @@ export const CareerGraph: React.FC = () => {
               let bgClass = 'bg-white border-neutral-light text-neutral-darkest';
               if (node.type === 'job') bgClass = 'bg-primary-dark text-white border-primary-dark';
               else if (node.type === 'skill') bgClass = 'bg-success/10 border-success text-success-dark';
+              else if (node.type === 'user') bgClass = 'bg-accent border-accent-dark text-white';
               
               return (
                 <button
@@ -119,7 +128,7 @@ export const CareerGraph: React.FC = () => {
             <div className="flex items-center gap-2 mb-2">
               <Network size={20} className="text-primary" />
               <span className="text-sm font-medium text-neutral-dark uppercase tracking-wider">
-                {selectedNode.type === 'job' ? 'Job Role' : 'Skill'}
+                {selectedNode.type === 'job' ? 'Job Role' : selectedNode.type === 'user' ? 'Profile' : 'Skill'}
               </span>
             </div>
             <h2 className="text-2xl font-bold text-neutral-darkest mb-4">{selectedNode.label}</h2>
@@ -157,6 +166,18 @@ export const CareerGraph: React.FC = () => {
                       const otherId = e.source === selectedNode.id ? e.target : e.source;
                       const otherNode = nodes.find(n => n.id === otherId);
                       return otherNode ? <Badge key={otherNode.id} variant="outline">{otherNode.label}</Badge> : null;
+                    })}
+                  </div>
+                </div>
+              </div>
+            {selectedNode.type === 'user' && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-neutral-darkest mb-2">Your Current Skills</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {edges.filter(e => e.source === selectedNode.id).map(e => {
+                      const target = nodes.find(n => n.id === e.target);
+                      return target ? <Badge key={target.id} variant="success">{target.label}</Badge> : null;
                     })}
                   </div>
                 </div>

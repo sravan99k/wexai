@@ -71,46 +71,64 @@ app.get('/api/user/skills', async (req, res) => {
   }
 });
 
-// 4. Get Jobs and calculate Match Score (Multi-Hop Query)
+// 4. Get Jobs and calculate Match Score (Multi-Hop Query Optimized)
 app.get('/api/jobs', async (req, res) => {
   const session = driver.session();
   try {
     const result = await session.run(`
       MATCH (j:Job)-[r:REQUIRES]->(s:Skill)
       OPTIONAL MATCH (u:User {id: 'u1'})-[:HAS_SKILL]->(s)
-      WITH j, count(r) AS totalRequired, count(u) AS matchedSkills
-      RETURN j, totalRequired, matchedSkills, toInteger((toFloat(matchedSkills) / totalRequired) * 100) AS matchPercentage
+      WITH j, count(r) AS totalRequired, count(u) AS matchedSkills, collect({
+        skillId: s.id, importance: r.importance, difficulty: r.difficulty, explanation: r.explanation
+      }) AS requirements
+      RETURN j, totalRequired, matchedSkills, toInteger((toFloat(matchedSkills) / totalRequired) * 100) AS matchPercentage, requirements
       ORDER BY matchPercentage DESC
     `);
     
-    const jobs = [];
-    for (const record of result.records) {
+    const jobs = result.records.map((record: any) => {
       const jobNode = record.get('j').properties;
       const matchPercentage = record.get('matchPercentage').toNumber();
-      
-      const reqResult = await session.run(`
-        MATCH (j:Job {id: $jobId})-[r:REQUIRES]->(s:Skill)
-        RETURN s.id AS skillId, r.importance AS importance, r.difficulty AS difficulty, r.explanation AS explanation
-      `, { jobId: jobNode.id });
-      
-      const requirements = reqResult.records.map((r: any) => ({
-        skillId: r.get('skillId'),
-        importance: r.get('importance'),
-        difficulty: r.get('difficulty'),
-        explanation: r.get('explanation')
-      }));
+      const requirements = record.get('requirements');
 
-      jobs.push({
+      return {
         ...jobNode,
         matchPercentage,
         requirements
-      });
-    }
+      };
+    });
     
     res.json(jobs);
   } catch (error) {
     console.error('Error fetching jobs:', error);
     res.status(500).json({ error: 'Failed to fetch jobs' });
+  } finally {
+    await session.close();
+  }
+});
+
+// 4b. Genuine 2+ Hop Traversal: Skill Bridge
+app.get('/api/jobs/:id/bridge', async (req, res) => {
+  const jobId = req.params.id;
+  const session = driver.session();
+  try {
+    const result = await session.run(`
+      MATCH (u:User {id: 'u1'})-[:HAS_SKILL]->(current:Skill)
+      MATCH (current)-[:LEADS_TO*1..2]->(related:Skill)
+      MATCH (job:Job {id: $jobId})-[:REQUIRES]->(related)
+      WHERE NOT (u)-[:HAS_SKILL]->(related)
+      RETURN DISTINCT current.name AS currentSkill, related.name AS recommendedSkill, job.title AS targetJob
+    `, { jobId });
+    
+    const bridges = result.records.map((record: any) => ({
+      currentSkill: record.get('currentSkill'),
+      recommendedSkill: record.get('recommendedSkill'),
+      targetJob: record.get('targetJob')
+    }));
+    
+    res.json(bridges);
+  } catch (error) {
+    console.error('Error fetching job bridge:', error);
+    res.status(500).json({ error: 'Failed to fetch job bridge' });
   } finally {
     await session.close();
   }
@@ -139,25 +157,27 @@ app.post('/api/user/skills', async (req, res) => {
   }
 });
 
-// 5. Get Graph Data
+// 5. Get Graph Data (Including User)
 app.get('/api/graph', async (req, res) => {
   const session = driver.session();
   try {
     const nodeResult = await session.run(`
       MATCH (n) 
-      WHERE n:Job OR n:Skill
+      WHERE n:Job OR n:Skill OR n:User
       RETURN id(n) AS id, labels(n)[0] AS type, n.name AS name, n.title AS title
     `);
     
-    const nodes = nodeResult.records.map((r: any) => ({
-      id: r.get('id').toString(),
-      label: r.get('name') || r.get('title'),
-      type: r.get('type') === 'Job' ? 'job' : 'skill'
-    }));
+    const nodes = nodeResult.records.map((r: any) => {
+      const type = r.get('type').toLowerCase();
+      return {
+        id: r.get('id').toString(),
+        label: r.get('name') || r.get('title'),
+        type: type === 'user' ? 'user' : type === 'job' ? 'job' : 'skill'
+      };
+    });
 
     const edgeResult = await session.run(`
       MATCH (n)-[r]->(m)
-      WHERE type(r) <> 'HAS_SKILL'
       RETURN id(n) AS source, id(m) AS target
     `);
 

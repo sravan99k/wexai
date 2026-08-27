@@ -1,85 +1,113 @@
-# SkillPath: Career Graph Explorer
+# SkillPath: AI-Powered Career Skill Gap Explorer
 
-SkillPath is a web application backed by a graph database (CognoDB) that helps users understand the gap between their current skills and the requirements of their target jobs.
+SkillPath is a graph-powered application that helps students, developers, and job seekers understand the gap between the skills they currently have and the skills required for a target job.
+
+Unlike traditional SQL-backed applications, SkillPath leverages a **Graph Database** to map complex, multi-hop relationships between users, foundational skills, advanced frameworks, and job roles.
 
 ## Why a Graph Database?
 
-Career paths, skills, and job requirements inherently form a complex network of relationships.
-- **Many-to-Many Relationships**: A user has many skills, a job requires many skills, and a skill is required by many jobs.
-- **Transitive Relationships**: Skill A leads to Skill B (e.g., JavaScript -> TypeScript). If a job requires TypeScript, a user who only knows JavaScript is closer to that requirement than someone starting from scratch.
-- **Relational Drawbacks**: In a traditional SQL database, analyzing skill gaps involves complex, expensive `JOIN` operations across associative tables (`user_skills`, `job_requirements`, `skill_relations`).
-- **Graph Advantage**: In a graph database like Neo4j (CognoDB), traversing from a `User` node to a `Job` node through `Skill` relationships is instantaneous and semantically natural. Multi-hop queries to calculate missing skills or match percentages become simple Cypher traversals.
+In a traditional relational database, calculating a dynamic match percentage based on missing transitive skills requires complex, expensive `JOIN` tables. In SkillPath, the Cypher query language elegantly hops through relationships in a few lines of code to generate real-time match scores and multi-hop "Skill Bridge" recommendations.
 
-## Data Model
+### Architecture
 
 ```mermaid
 graph TD
-    U([User])
-    S1([Skill])
-    S2([Skill])
-    J([Job])
-    
-    U -- HAS_SKILL --> S1
-    J -- REQUIRES {importance, difficulty} --> S1
-    J -- REQUIRES --> S2
-    S1 -- LEADS_TO --> S2
-    S1 -- RELATED_TO --> S2
+    UI[React 19 + Tailwind UI] -->|REST API| API[Express API (Vercel Serverless)]
+    API -->|Bolt Protocol| Driver[neo4j-driver]
+    Driver -->|openCypher| DB[(CognoDB)]
 ```
 
-## Setup & Running
+### Graph Data Model
 
-### Prerequisites
-- Node.js (v18+)
-- A CognoDB instance
+The application centers around three node labels (`User`, `Skill`, `Job`) connected by meaningful edges.
 
-### 1. Environment Setup
-Create a `.env` file in the root directory:
-```env
-NEO4J_URI=bolt+s://<your-instance-id>.databases.cognodb.cloud
-NEO4J_USERNAME=cognodb
-NEO4J_PASSWORD=<your-password>
-PORT=3001
+```mermaid
+graph LR
+    U[User] -->|HAS_SKILL| S1[Skill: JavaScript]
+    S1 -->|LEADS_TO| S2[Skill: TypeScript]
+    J[Job: Full Stack] -->|REQUIRES| S1
+    J -->|REQUIRES| S2
 ```
+*Relationship properties:* `REQUIRES` edges contain `{importance, difficulty, explanation}` to provide rich context on *why* a skill is needed.
 
-### 2. Install Dependencies
-```bash
-npm install
-```
+---
 
-### 3. Seed the Database
-Populates the graph with mock users, skills, jobs, and their relationships:
-```bash
-npx tsx server/seed.ts
-```
+## Core Graph Queries
 
-### 4. Run the Application
-Start the backend API server:
-```bash
-npx tsx server/index.ts
-```
+The power of CognoDB is demonstrated in three primary Cypher queries used in the application.
 
-In a new terminal window, start the frontend development server:
-```bash
-npm run dev
-```
-
-## Cypher Queries Explained
-
-### 1. Match Percentage & Skill Gap Analysis (Multi-Hop)
-This query calculates how well a user matches a job by counting the required skills they already possess.
+### Query 1: Dynamic Match Calculation (N+1 Optimized)
+Calculates how many required skills the user possesses out of the total required for every job in a single pass.
 ```cypher
 MATCH (j:Job)-[r:REQUIRES]->(s:Skill)
 OPTIONAL MATCH (u:User {id: 'u1'})-[:HAS_SKILL]->(s)
-WITH j, count(r) AS totalRequired, count(u) AS matchedSkills
-RETURN j, totalRequired, matchedSkills, toInteger((toFloat(matchedSkills) / totalRequired) * 100) AS matchPercentage
+WITH j, count(r) AS totalRequired, count(u) AS matchedSkills, collect({
+  skillId: s.id, importance: r.importance, difficulty: r.difficulty, explanation: r.explanation
+}) AS requirements
+RETURN j, totalRequired, matchedSkills, toInteger((toFloat(matchedSkills) / totalRequired) * 100) AS matchPercentage, requirements
 ORDER BY matchPercentage DESC
 ```
-**Why it's powerful:** It traverses from `Job` to `Skill` and checks for a reverse connection from `User` to `Skill` in a single pass, avoiding multiple table lookups.
 
-### 2. Inserting Skill Relationships safely (APOC / Fallback)
+### Query 2: Multi-Hop Skill Bridge Traversal
+A genuine `2+ hop` traversal that finds missing skills required for a target job, which are reachable (via `LEADS_TO`) from skills the user *already* knows.
 ```cypher
-MATCH (source:Skill { id: $sourceId })
-MATCH (target:Skill { id: $targetId })
-MERGE (source)-[r:LEADS_TO]->(target)
+MATCH (u:User {id: 'u1'})-[:HAS_SKILL]->(current:Skill)
+MATCH (current)-[:LEADS_TO*1..2]->(related:Skill)
+MATCH (job:Job {id: $jobId})-[:REQUIRES]->(related)
+WHERE NOT (u)-[:HAS_SKILL]->(related)
+RETURN DISTINCT current.name AS currentSkill, related.name AS recommendedSkill, job.title AS targetJob
 ```
-Used in our seed script to establish learning paths between technologies.
+
+### Query 3: Graph Visualization
+Fetches the entire context map (excluding isolated nodes) to render the interactive SVG Career Graph.
+```cypher
+MATCH (n) 
+WHERE n:Job OR n:Skill OR n:User
+RETURN id(n) AS id, labels(n)[0] AS type, n.name AS name, n.title AS title
+
+MATCH (n)-[r]->(m)
+RETURN id(n) AS source, id(m) AS target
+```
+
+---
+
+## Setup & Local Development
+
+1. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Environment Variables**
+   Create a `.env` file in the root directory with your CognoDB credentials:
+   ```env
+   NEO4J_URI=bolt+s://your-instance.databases.cognodb.com
+   NEO4J_USERNAME=cognodb
+   NEO4J_PASSWORD=your_password
+   ```
+
+3. **Seed the Database**
+   Populate the graph with Jobs, Skills, and Relationships.
+   ```bash
+   npx tsx server/seed.ts
+   ```
+
+4. **Run Locally**
+   Start the Vite frontend and Express backend concurrently:
+   ```bash
+   npm run dev
+   # (In a separate terminal)
+   npx tsx server/index.ts
+   ```
+
+## Live Demo & Screenshots
+**Vercel Production Demo**: [https://wexai.vercel.app](https://wexai.vercel.app) *(Replace with your actual URL)*
+
+### Dashboard & Match Scores
+*(Add screenshot of Dashboard here)*
+
+### Multi-Hop Skill Bridge
+*(Add screenshot of Job Details here)*
+
+### Career Graph Visualization
+*(Add screenshot of Career Graph here)*
