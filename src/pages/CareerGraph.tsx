@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Network } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { fetchGraphData } from '../api';
@@ -7,13 +8,33 @@ export const CareerGraph: React.FC = () => {
   const [nodes, setNodes] = useState<any[]>([]);
   const [edges, setEdges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const data = await fetchGraphData();
+        
+        // Assign coordinates dynamically for the SVG layout
+        const jobNodes = data.nodes.filter((n: any) => n.type === 'job');
+        const skillNodes = data.nodes.filter((n: any) => n.type === 'skill');
+        
+        jobNodes.forEach((node: any, i: number) => {
+          node.x = 20 + (60 * (i / Math.max(1, jobNodes.length - 1)));
+          node.y = 20;
+        });
+
+        skillNodes.forEach((node: any, i: number) => {
+          // Wrap skills in a couple of rows
+          const row = Math.floor(i / 5);
+          const col = i % 5;
+          node.x = 10 + (80 * (col / 4));
+          node.y = 50 + (20 * row);
+        });
+
         setNodes(data.nodes);
         setEdges(data.edges);
+        if (data.nodes.length > 0) setSelectedNode(data.nodes[0]);
       } catch (e) {
         console.error(e);
       } finally {
@@ -23,94 +44,127 @@ export const CareerGraph: React.FC = () => {
     loadData();
   }, []);
 
-  if (loading) return <div className="p-8 text-neutral-dark">Loading graph data...</div>;
-
-  const jobNodes = nodes.filter(n => n.type === 'job');
-  const skillNodes = nodes.filter(n => n.type === 'skill');
+  if (loading) return <div className="p-8 text-neutral-dark">Loading graph...</div>;
+  if (!selectedNode && nodes.length > 0) setSelectedNode(nodes[0]);
+  if (!selectedNode) return null;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+    <div className="h-[calc(100vh-6rem)] flex flex-col animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-bold text-neutral-darkest">Explore Career Graph</h1>
-        <p className="text-neutral mt-2 text-lg">Understand how foundational skills lead to advanced tools and job opportunities.</p>
+        <h1 className="text-3xl font-bold text-neutral-darkest">Explore Your Career Graph</h1>
+        <p className="text-neutral mt-2 text-lg">See how your skills connect to technologies, projects, and career opportunities.</p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="flex-1 mt-6 flex flex-col md:flex-row gap-6 min-h-0">
         
-        {/* Column 1: Core Skills & Concepts */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-neutral-darkest mb-6 pb-2 border-b-2 border-primary-light/30">
-            1. Foundational Skills
-          </h2>
-          {skillNodes.map(skill => {
-            const leadsToEdges = edges.filter(e => e.source === skill.id);
-            if (leadsToEdges.length === 0) return null; // Only show if it leads to something
+        {/* Graph Area */}
+        <Card className="flex-1 overflow-hidden flex flex-col relative h-full bg-neutral-lightest">
+          {/* Legend */}
+          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur p-3 rounded-lg border border-neutral-light shadow-sm text-sm z-10">
+            <h4 className="font-semibold mb-2">Legend</h4>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-primary-dark"></div>Job Role</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-success"></div>Skill</div>
+            </div>
+          </div>
+
+          <div className="flex-1 relative w-full h-full overflow-auto">
+            <svg className="absolute inset-0 w-[150%] h-[150%] md:w-full md:h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%' }}>
+              {edges.map((edge, i) => {
+                const sourceNode = nodes.find(n => n.id === edge.source);
+                const targetNode = nodes.find(n => n.id === edge.target);
+                if (!sourceNode || !targetNode) return null;
+                
+                const isHighlighted = selectedNode && (selectedNode.id === sourceNode.id || selectedNode.id === targetNode.id);
+                
+                return (
+                  <line 
+                    key={i}
+                    x1={`${sourceNode.x}%`} 
+                    y1={`${sourceNode.y}%`} 
+                    x2={`${targetNode.x}%`} 
+                    y2={`${targetNode.y}%`} 
+                    stroke={isHighlighted ? '#14b8a6' : '#cbd5e1'} 
+                    strokeWidth={isHighlighted ? 3 : 1.5}
+                    className="transition-all duration-300"
+                  />
+                );
+              })}
+            </svg>
             
-            return (
-              <Card key={skill.id} className="border-l-4 border-l-primary/60 hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <h3 className="font-bold text-neutral-darkest">{skill.label}</h3>
-                  <div className="mt-2 text-sm text-neutral-dark">
-                    <span className="font-semibold">Leads to:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {leadsToEdges.map(r => {
-                        const target = nodes.find(s => s.id === r.target && s.type === 'skill');
-                        return target ? <Badge key={target.id} variant="outline" className="text-xs">{target.label}</Badge> : null;
-                      })}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+            {nodes.map((node) => {
+              const isSelected = selectedNode?.id === node.id;
+              
+              let bgClass = 'bg-white border-neutral-light text-neutral-darkest';
+              if (node.type === 'job') bgClass = 'bg-primary-dark text-white border-primary-dark';
+              else if (node.type === 'skill') bgClass = 'bg-success/10 border-success text-success-dark';
+              
+              return (
+                <button
+                  key={node.id}
+                  onClick={() => setSelectedNode(node)}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-lg border-2 shadow-sm font-semibold text-sm transition-all duration-300 hover:scale-105 ${bgClass} ${isSelected ? 'ring-4 ring-primary/30 scale-105 z-10' : ''}`}
+                  style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                >
+                  {node.label}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
 
-        {/* Column 2: Advanced Tools & Frameworks */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-neutral-darkest mb-6 pb-2 border-b-2 border-accent-light/30">
-            2. Tools & Frameworks
-          </h2>
-          {skillNodes.map(skill => (
-            <Card key={skill.id} className="border-l-4 border-l-accent/60 hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <h3 className="font-bold text-neutral-darkest">{skill.label}</h3>
-                <div className="mt-2 text-sm text-neutral-dark">
-                  <span className="font-semibold">Required by:</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {edges.filter(e => e.target === skill.id).map(r => {
-                      const target = nodes.find(s => s.id === r.source && s.type === 'job');
-                      return target ? <Badge key={target.id} variant="outline" className="text-[10px] py-0">{target.label}</Badge> : null;
+        {/* Detail Panel */}
+        <Card className="w-full md:w-80 h-full overflow-y-auto shrink-0 border-l-4 border-l-primary/50">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Network size={20} className="text-primary" />
+              <span className="text-sm font-medium text-neutral-dark uppercase tracking-wider">
+                {selectedNode.type === 'job' ? 'Job Role' : 'Skill'}
+              </span>
+            </div>
+            <h2 className="text-2xl font-bold text-neutral-darkest mb-4">{selectedNode.label}</h2>
+            
+            {selectedNode.type === 'job' && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-neutral-darkest mb-2">Required Skills</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {edges.filter(e => e.source === selectedNode.id).map(e => {
+                      const target = nodes.find(n => n.id === e.target);
+                      return target ? <Badge key={target.id} variant="outline">{target.label}</Badge> : null;
                     })}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Column 3: Job Roles */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-neutral-darkest mb-6 pb-2 border-b-2 border-success/30">
-            3. Career Opportunities
-          </h2>
-          {jobNodes.map(job => (
-            <Card key={job.id} className="border-l-4 border-l-success/60 bg-success/5 hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <h3 className="font-bold text-neutral-darkest">{job.label}</h3>
-                <div className="mt-3">
-                  <span className="text-xs font-semibold text-neutral-dark">Key Requirements:</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {edges.filter(e => e.source === job.id).slice(0, 5).map(req => {
-                      const skill = nodes.find(s => s.id === req.target);
-                      return skill ? <Badge key={skill.id} variant="default" className="text-[10px] py-0">{skill.label}</Badge> : null;
+              </div>
+            )}
+            
+            {selectedNode.type === 'skill' && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-neutral-darkest mb-2">Required by roles:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {edges.filter(e => e.target === selectedNode.id && nodes.find(n => n.id === e.source)?.type === 'job').map(e => {
+                      const source = nodes.find(n => n.id === e.source);
+                      return source ? <Badge key={source.id} variant="default">{source.label}</Badge> : null;
                     })}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
+                
+                <div>
+                  <h4 className="font-semibold text-neutral-darkest mb-2">Related connections:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {edges.filter(e => (e.target === selectedNode.id || e.source === selectedNode.id) && nodes.find(n => n.id === (e.source === selectedNode.id ? e.target : e.source))?.type === 'skill').map(e => {
+                      const otherId = e.source === selectedNode.id ? e.target : e.source;
+                      const otherNode = nodes.find(n => n.id === otherId);
+                      return otherNode ? <Badge key={otherNode.id} variant="outline">{otherNode.label}</Badge> : null;
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
