@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { driver } from './db';
+import { driver } from './db.js';
 
 dotenv.config();
 

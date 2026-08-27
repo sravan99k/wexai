@@ -1,5 +1,5 @@
-import app from '../api/index';
-import { checkConnection } from '../api/db';
+import app from '../api/index.js';
+import { checkConnection } from '../api/db.js';
 
 const port = process.env.PORT || 3001;
 
