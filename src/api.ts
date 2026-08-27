@@ -1,6 +1,7 @@
 import type { Skill, Job } from './types';
 
-const API_URL = 'http://localhost:3001/api';
+// When deployed to Vercel, the frontend and API are on the same domain
+const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
 
 export const fetchSkills = async (): Promise<Skill[]> => {
   const res = await fetch(`${API_URL}/skills`);

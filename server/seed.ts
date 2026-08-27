@@ -1,4 +1,4 @@
-import { driver } from './db';
+import { driver } from '../api/db';
 import dotenv from 'dotenv';
 dotenv.config();
 
