@@ -9,13 +9,12 @@ const password = process.env.NEO4J_PASSWORD;
 
 if (!uri || !user || !password) {
   console.error("Missing Neo4j connection details in environment variables.");
-  process.exit(1);
 }
 
-// Create a driver instance
-export const driver = neo4j.driver(uri, neo4j.auth.basic(user, password), {
-  maxConnectionPoolSize: 100, // Stay well within the 200 connection limit of the free tier
-});
+// Create a driver instance, or a dummy if missing credentials so it doesn't crash the serverless boot
+export const driver = (uri && user && password)
+  ? neo4j.driver(uri, neo4j.auth.basic(user, password), { maxConnectionPoolSize: 100 })
+  : { session: () => { throw new Error("Missing Neo4j credentials in environment variables"); } } as any;
 
 // Helper to check connection
 export const checkConnection = async () => {
