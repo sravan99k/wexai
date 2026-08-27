@@ -20,7 +20,7 @@ app.get('/api/skills', async (req, res) => {
   const session = driver.session();
   try {
     const result = await session.run(`MATCH (s:Skill) RETURN s.id AS id, s.name AS name, s.category AS category ORDER BY s.name`);
-    const skills = result.records.map(record => ({
+    const skills = result.records.map((record: any) => ({
       id: record.get('id'),
       name: record.get('name'),
       category: record.get('category'),
@@ -61,7 +61,7 @@ app.get('/api/user/skills', async (req, res) => {
       MATCH (u:User {id: 'u1'})-[:HAS_SKILL]->(s:Skill)
       RETURN s.id AS id
     `);
-    const skillIds = result.records.map(record => record.get('id'));
+    const skillIds = result.records.map((record: any) => record.get('id'));
     res.json(skillIds);
   } catch (error) {
     console.error('Error fetching user skills:', error);
@@ -93,7 +93,7 @@ app.get('/api/jobs', async (req, res) => {
         RETURN s.id AS skillId, r.importance AS importance, r.difficulty AS difficulty, r.explanation AS explanation
       `, { jobId: jobNode.id });
       
-      const requirements = reqResult.records.map(r => ({
+      const requirements = reqResult.records.map((r: any) => ({
         skillId: r.get('skillId'),
         importance: r.get('importance'),
         difficulty: r.get('difficulty'),
@@ -149,7 +149,7 @@ app.get('/api/graph', async (req, res) => {
       RETURN id(n) AS id, labels(n)[0] AS type, n.name AS name, n.title AS title
     `);
     
-    const nodes = nodeResult.records.map(r => ({
+    const nodes = nodeResult.records.map((r: any) => ({
       id: r.get('id').toString(),
       label: r.get('name') || r.get('title'),
       type: r.get('type') === 'Job' ? 'job' : 'skill'
@@ -161,7 +161,7 @@ app.get('/api/graph', async (req, res) => {
       RETURN id(n) AS source, id(m) AS target
     `);
 
-    const edges = edgeResult.records.map(r => ({
+    const edges = edgeResult.records.map((r: any) => ({
       source: r.get('source').toString(),
       target: r.get('target').toString()
     }));
