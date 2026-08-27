@@ -170,6 +170,8 @@ export const CareerGraph: React.FC = () => {
                   </div>
                 </div>
               </div>
+            )}
+            
             {selectedNode.type === 'user' && (
               <div className="space-y-4">
                 <div>
